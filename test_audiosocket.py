@@ -504,21 +504,21 @@ class TestVoiceActivityDetection(unittest.TestCase):
 
     def setUp(self):
         try:
-            import webrtcvad
+        import webrtcvad
             self.webrtcvad_available = True
-            self.vad = webrtcvad.Vad()
-            self.sample_rate = 8000
-            # Generate 30ms of silence (all zeros)
-            self.silence = (
-                (np.zeros(int(self.sample_rate * 0.03))).astype(np.int16).tobytes()
-            )
-            # Generate 30ms of 440Hz sine wave (speech-like)
-            t = np.linspace(0, 0.03, int(self.sample_rate * 0.03), endpoint=False)
-            self.speech = (
-                (0.5 * np.sin(2 * np.pi * 440 * t) * 32767)
-                .astype(np.int16)
-                .tobytes()
-            )
+        self.vad = webrtcvad.Vad()
+        self.sample_rate = 8000
+        # Generate 30ms of silence (all zeros)
+        self.silence = (
+            (np.zeros(int(self.sample_rate * 0.03))).astype(np.int16).tobytes()
+        )
+        # Generate 30ms of 440Hz sine wave (speech-like)
+        t = np.linspace(0, 0.03, int(self.sample_rate * 0.03), endpoint=False)
+        self.speech = (
+            (0.5 * np.sin(2 * np.pi * 440 * t) * 32767)
+            .astype(np.int16)
+            .tobytes()
+        )
         except ImportError as e:
             self.webrtcvad_available = False
             self.skip_reason = f"webrtcvad not available: {e}"
