@@ -92,7 +92,7 @@ class Connection:
             print("[ASTERISK ERROR] Memory allocation error")
         return
 
-    # Gets AudioSocket audio from the rx queue
+    # Gets AudioSocket audio from the rx queue - FIXED: Non-blocking read
     def read(self):
         try:
             # FIXED: Use non-blocking get() instead of blocking with timeout
@@ -160,7 +160,7 @@ class Connection:
                     self._user_resample.ratecv_state,
                 )
 
-            # If the audio isn't already in mono, then
+            # If the user isn't already in mono, then
             # it needs to be downmixed as well
             if self._user_resample.channels == 2:
                 audio = audioop.tomono(audio, 2, 1, 1)
@@ -236,4 +236,4 @@ class Connection:
                 self._decode_error(payload)
 
             elif type == types.uuid:
-                self.uuid = payload.hex()
+                self.uuid = payload.hex() 
