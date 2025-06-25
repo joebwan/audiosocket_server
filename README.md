@@ -427,6 +427,7 @@ sudo chmod +x /opt/audiosocket_server/*.py
 - Ensure audio files are 8kHz, 16-bit, mono WAV format
 - Check audio file paths in `mapping.py`
 - Verify audio file permissions
+- **For echo server audio quality issues, see**: [Audio Quality Testing Guide](docs/audio_quality_testing.md)
 
 #### Python 3.13 Compatibility
 The project includes a compatibility layer for `audioop` which was removed in Python 3.13. This is handled automatically.
