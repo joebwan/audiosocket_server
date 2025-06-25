@@ -66,7 +66,7 @@ class Connection:
         self._rx_q = Queue(500)
         self._tx_q = Queue(500)
         self._lock = Lock()
-        
+
         # Header logging
         self._header_logged = False
         self._frame_count = 0
@@ -252,9 +252,9 @@ class Connection:
                             self.conn.send(silence_response)
                         print(f"[AUDIOSOCKET DEBUG] Sent silence response: {len(silence_response)} bytes (tx_q empty, size={txq_size})")
                     else:
-                        audio_data = self._tx_q.get()[:320]
+                    audio_data = self._tx_q.get()[:320]
                         response = types.audio + len(audio_data).to_bytes(2, "big") + audio_data
-                        with self._lock:
+                    with self._lock:
                             self.conn.send(response)
                         print(f"[AUDIOSOCKET DEBUG] Sent audio response: {len(response)} bytes (tx_q size after get={self._tx_q.qsize()})")
 
