@@ -1,104 +1,137 @@
 #!/usr/bin/env python3
 """
 Fixed Echo Server
-Uses the corrected connection.py with non-blocking reads to eliminate choppy audio.
+Simple echo server using the corrected AudioSocket implementation with proper variable-length frame parsing.
 """
 
 import time
-from threading import Thread
-import sys
-import os
-
-# Add the current directory to the path so we can import our fixed connection
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-# Import the fixed connection module
-from connection_fixed import Connection
-from audiosocket import Audiosocket
+from audiosocket_fixed import Audiosocket
 from mylogging import ColouredLogger
 
 
 class FixedEchoServer:
-    """Echo server using the fixed connection with non-blocking reads"""
+    """Echo server with proper AudioSocket frame parsing"""
     
     def __init__(self, host="0.0.0.0", port=6050):
-        # Create audiosocket but we'll override the connection creation
         self.audiosocket = Audiosocket((host, port))
-        
-        # Override the connection creation to use our fixed version
-        self.audiosocket._create_connection = self._create_fixed_connection
-        
+        self.host = host
+        self.port = port
         self.logger = ColouredLogger("fixed_echo")
-        self.logger.info(f"Fixed echo server started on {host}:{port}")
-        self.logger.info("Using non-blocking reads to eliminate choppy audio")
         
-    def _create_fixed_connection(self, conn, peer_addr, user_resample, asterisk_resample):
-        """Create a connection using our fixed connection class"""
-        return Connection(conn, peer_addr, user_resample, asterisk_resample)
+        self.logger.info(f"Fixed Echo Server started on {host}:{port}")
+        self.logger.info("This server uses proper variable-length frame parsing")
+        self.logger.info("Features:")
+        self.logger.info("- Correct AudioSocket protocol implementation")
+        self.logger.info("- Variable-length frame parsing")
+        self.logger.info("- Proper frame boundary detection")
+        self.logger.info("- Real-time echo with correct timing")
+        self.logger.info("")
         
     def handle_connection(self, call):
-        """Handle connection with fixed non-blocking reads"""
-        self.logger.info(f"New connection from {call.peer_addr}")
+        """Handle AudioSocket connection with proper echo"""
+        self.logger.info("=" * 50)
+        self.logger.info("FIXED ECHO SERVER - NEW CONNECTION")
+        self.logger.info("=" * 50)
         
+        # Log connection details
+        self.logger.info(f"Peer address: {call.peer_addr}")
+        self.logger.info(f"Call UUID: {getattr(call, 'uuid', 'Not set')}")
+        self.logger.info("")
+        
+        # Statistics tracking
         frame_count = 0
         start_time = time.time()
-        last_log_time = start_time
         
-        while call.connected:
-            try:
-                # Read audio data (now non-blocking)
+        try:
+            # Echo loop
+            while call.connected:
+                # Read incoming audio
                 audio_data = call.read()
-                frame_size = len(audio_data)
-                
                 frame_count += 1
                 
-                # Echo audio back
+                # Log first few frames
+                if frame_count <= 5:
+                    self.logger.info(f"Frame {frame_count}: {len(audio_data)} bytes")
+                
+                # Echo immediately
                 call.write(audio_data)
                 
-                # Log statistics every 5 seconds
-                current_time = time.time()
-                if current_time - last_log_time >= 5:
-                    elapsed = current_time - start_time
-                    fps = frame_count / elapsed
-                    self.logger.info(f"Frames: {frame_count}, FPS: {fps:.1f}, "
-                                   f"Frame size: {frame_size}, Elapsed: {elapsed:.1f}s")
-                    last_log_time = current_time
+                # Log every 100 frames
+                if frame_count % 100 == 0:
+                    elapsed = time.time() - start_time
+                    fps = frame_count / elapsed if elapsed > 0 else 0
+                    self.logger.info(f"Frame {frame_count}: FPS={fps:.1f}")
                 
-                # Add minimal delay to prevent overwhelming the system
-                time.sleep(0.001)  # 1ms delay
+                # Small delay to prevent overwhelming
+                time.sleep(0.001)
                 
-            except Exception as e:
-                self.logger.error(f"Error in echo loop: {e}")
-                break
+        except Exception as e:
+            self.logger.error(f"Error during echo: {e}")
         
-        self.logger.info(f"Connection ended. Total frames: {frame_count}")
+        # Final statistics
+        total_time = time.time() - start_time
+        self.logger.info("")
+        self.logger.info("=" * 50)
+        self.logger.info("ECHO SESSION SUMMARY")
+        self.logger.info("=" * 50)
+        self.logger.info(f"Total frames processed: {frame_count}")
+        self.logger.info(f"Total time: {total_time:.3f}s")
+        
+        if frame_count > 0:
+            avg_fps = frame_count / total_time if total_time > 0 else 0
+            self.logger.info(f"Average FPS: {avg_fps:.1f}")
+            self.logger.info(f"Expected FPS: 50.0 (20ms intervals)")
+            
+            # Check frame rate
+            speed_ratio = avg_fps / 50.0 if avg_fps > 0 else 0
+            if abs(speed_ratio - 1.0) < 0.1:
+                self.logger.info("✅ Frame rate is correct")
+            else:
+                self.logger.warning(f"⚠️  Frame rate is {speed_ratio:.1f}x expected")
+        
+        self.logger.info("=" * 50)
+        self.logger.info("")
     
     def start(self):
         """Start the fixed echo server"""
-        while True:
-            try:
+        self.logger.info("Fixed Echo Server is running...")
+        self.logger.info("Waiting for AudioSocket connections...")
+        self.logger.info("Press Ctrl+C to stop")
+        self.logger.info("")
+        
+        connection_count = 0
+        
+        try:
+            while True:
+                # Accept connections
                 call = self.audiosocket.listen()
-                thread = Thread(target=self.handle_connection, args=(call,))
-                thread.daemon = True
-                thread.start()
-            except KeyboardInterrupt:
-                self.logger.info("Server stopped by user")
-                break
-            except Exception as e:
-                self.logger.error(f"Server error: {e}")
+                connection_count += 1
+                
+                self.logger.info(f"Connection #{connection_count} accepted")
+                
+                # Handle connection
+                self.handle_connection(call)
+                
+        except KeyboardInterrupt:
+            self.logger.info("")
+            self.logger.info("Fixed Echo Server stopped by user")
+            self.logger.info(f"Total connections handled: {connection_count}")
+        except Exception as e:
+            self.logger.error(f"Server error: {e}")
 
 
 def main():
     """Main function"""
     print("Fixed Echo Server")
     print("================")
-    print("This server uses the corrected connection.py with non-blocking reads.")
-    print("This should eliminate the choppy audio caused by 64ms blocking delays.")
-    print("\nKey fix:")
-    print("- Changed from blocking read (timeout=0.2) to non-blocking read (get_nowait())")
-    print("- Eliminates 64ms delays that were causing choppy audio")
-    print("- Maintains real-time audio performance")
-    print("\nConnect your Asterisk AudioSocket and test the audio quality.\n")
+    print("This server uses the corrected AudioSocket implementation.")
+    print("\nKey improvements:")
+    print("- Proper variable-length frame parsing")
+    print("- Correct frame boundary detection")
+    print("- Spec-compliant protocol handling")
+    print("- Real-time echo with correct timing")
+    print("\nThis should fix the 14x speed issue and provide clean audio.")
+    print("\nPress Ctrl+C to stop the server.\n")
     
     server = FixedEchoServer()
     server.start()
