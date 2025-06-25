@@ -34,7 +34,7 @@ class TestAudioQuality(unittest.TestCase):
         if self.audiosocket and hasattr(self.audiosocket, "initial_sock"):
             self.audiosocket.initial_sock.close()
 
-    def create_test_audio_file(self, filename, duration=1.0, sample_rate=8000, frequency=440):
+    def create_test_audio_file(self, filename, duration=1.0, sample_rate=8000, frequency=440, channels=1):
         """Create a test WAV file with specified parameters"""
         filepath = os.path.join(self.temp_dir, filename)
         
@@ -43,8 +43,15 @@ class TestAudioQuality(unittest.TestCase):
         audio_data = np.sin(2 * np.pi * frequency * t) * 0.5
         audio_data = (audio_data * 32767).astype(np.int16)
         
+        # For stereo, duplicate the mono channel
+        if channels == 2:
+            stereo_data = np.empty(len(audio_data) * 2, dtype=np.int16)
+            stereo_data[0::2] = audio_data  # Left channel
+            stereo_data[1::2] = audio_data  # Right channel
+            audio_data = stereo_data
+        
         with wave.open(filepath, "wb") as wav_file:
-            wav_file.setnchannels(1)  # Mono
+            wav_file.setnchannels(channels)  # Mono or stereo
             wav_file.setsampwidth(2)  # 16-bit
             wav_file.setframerate(sample_rate)
             wav_file.writeframes(audio_data.tobytes())
@@ -71,8 +78,17 @@ class TestAudioQuality(unittest.TestCase):
         for config in configs:
             with self.subTest(config=config):
                 self.audiosocket = Audiosocket(("127.0.0.1", self.test_port))
-                self.audiosocket.prepare_input(**config)
-                self.audiosocket.prepare_output(**config)
+                
+                # Fix: Use correct parameter names for each method
+                input_config = {k: v for k, v in config.items()}
+                output_config = {
+                    "outrate": config["inrate"],  # Use inrate as outrate
+                    "channels": config["channels"],
+                    "ulaw2lin": config["ulaw2lin"]
+                }
+                
+                self.audiosocket.prepare_input(**input_config)
+                self.audiosocket.prepare_output(**output_config)
                 
                 self.logger.info(f"Testing config: {config}")
                 # Test passes if no exceptions are raised
@@ -240,10 +256,11 @@ class TestAudioQuality(unittest.TestCase):
         
         for sample_rate, channels, sample_width in valid_formats:
             with self.subTest(format=f"{sample_rate}Hz_{channels}ch_{sample_width*8}bit"):
-                # Create test file
+                # Create test file with correct channel count
                 test_file = self.create_test_audio_file(
                     f"test_{sample_rate}_{channels}_{sample_width}.wav",
-                    sample_rate=sample_rate
+                    sample_rate=sample_rate,
+                    channels=channels
                 )
                 
                 with wave.open(test_file, "rb") as wav_file:
