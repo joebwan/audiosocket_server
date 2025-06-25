@@ -23,17 +23,17 @@ class AudiosocketServer:
         # Create a globally accessible audiosocket instance
         self.audiosocket = Audiosocket(("0.0.0.0", 6050))
 
-        # FIXED: Use proper telephony settings for better audio quality
-        # Asterisk AudioSocket expects 8kHz, mono, 16-bit PCM
-        self.audiosocket.prepare_output(outrate=8000, channels=1, ulaw2lin=True)
-        self.audiosocket.prepare_input(inrate=8000, channels=1, ulaw2lin=True)
+        # FIXED: Use 16kHz to match Asterisk configuration (based on diagnostic results)
+        # Asterisk is sending 16kHz, mono, 16-bit PCM with 640-byte frames
+        self.audiosocket.prepare_output(outrate=16000, channels=1, ulaw2lin=True)
+        self.audiosocket.prepare_input(inrate=16000, channels=1, ulaw2lin=True)
 
         print(
             "Listening for new connections from Asterisk on port {}".format(
                 self.audiosocket.port
             )
         )
-        print("Audio Configuration: 8kHz, mono, 16-bit PCM with ULAW conversion")
+        print("Audio Configuration: 16kHz, mono, 16-bit PCM with ULAW conversion (matches Asterisk)")
 
     def handle_connection(self, call):
         """
