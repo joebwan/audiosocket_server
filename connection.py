@@ -66,6 +66,10 @@ class Connection:
         self._rx_q = Queue(500)
         self._tx_q = Queue(500)
         self._lock = Lock()
+        
+        # Header logging
+        self._header_logged = False
+        self._frame_count = 0
 
     # Splits data sent by AudioSocket into three different pieces
     def _split_data(self, data):
@@ -74,10 +78,23 @@ class Connection:
                 "[AUDIOSOCKET WARNING] The data received was less than 3 bytes, "
                 "the minimum length data from Asterisk AudioSocket should be."
             )
+            print(f"[AUDIOSOCKET DEBUG] Received data: {data!r}")
             return b"\x00", 0, bytes(320)
         else:
             # type      length                            payload
-            return data[:1], int.from_bytes(data[1:3], "big"), data[3:]
+            msg_type = data[:1]
+            msg_length = int.from_bytes(data[1:3], "big")
+            payload = data[3:]
+            
+            # Log header information for first few frames
+            if not self._header_logged or self._frame_count < 10:
+                print(f"[AUDIOSOCKET DEBUG] Frame {self._frame_count + 1}: Type={msg_type!r}, Length={msg_length}, Payload size={len(payload)}")
+                if self._frame_count == 0:
+                    print(f"[AUDIOSOCKET DEBUG] First frame data: {data!r}")
+                    self._header_logged = True
+            
+            self._frame_count += 1
+            return msg_type, msg_length, payload
 
     # If the type of message received was an error, this
     # prints an explanation of the specific one that occurred
@@ -181,9 +198,9 @@ class Connection:
         return
 
     def _process(self):
-        # The main audio receiving/sending loop, this loops
-        # until AudioSocket stops sending us data, the hangup() method is called or an error occurs.
-        # A disconnection can be triggered from the users end by calling the hangup() method
+        print(f"[AUDIOSOCKET INFO] Starting _process loop for {self.peer_addr}")
+        first_audio_sent = False
+        
         while True:
             data = None
 
@@ -192,17 +209,21 @@ class Connection:
                     data = self.conn.recv(323)
 
             except ConnectionResetError:
-                pass
+                print("[AUDIOSOCKET INFO] Connection reset by peer")
+                break
 
             if not data:
+                print("[AUDIOSOCKET INFO] No data received, connection closed")
                 self.connected = False
                 self.conn.close()
                 return
 
+            if self._frame_count < 5:
+                print(f"[AUDIOSOCKET DEBUG] Raw data received: {len(data)} bytes, first 10 bytes: {data[:10]!r}")
+
             type, length, payload = self._split_data(data)
 
             if type == types.audio:
-                # Adds received audio into the rx queue
                 if self._rx_q.full():
                     print(
                         "[AUDIOSOCKET WARNING] The inbound audio queue is full! "
@@ -211,29 +232,53 @@ class Connection:
                     )
                 else:
                     self._rx_q.put(payload)
+                    if self._frame_count <= 5:
+                        print(f"[AUDIOSOCKET DEBUG] Added {len(payload)} bytes to rx queue")
 
-                # To prevent the tx queue from blocking all execution if
-                # the user doesn't supply it with (enough) audio, silence is
-                # generated manually and sent back to AudioSocket whenever its empty.
-                if self._tx_q.empty():
-                    self.conn.send(types.audio + PCM_SIZE + bytes(320))
-                else:
-                    # If a single piece of audio data in the rx queue is larger than
-                    # 320 bytes, slice it before sending, however...
-                    # If the audio data to send is larger than this, then
-                    # it's probably in the wrong format to begin with and won't be
-                    # played back properly even when sliced.
-                    audio_data = self._tx_q.get()[:320]
-
+                txq_size = self._tx_q.qsize()
+                rxq_size = self._rx_q.qsize() if hasattr(self, '_rx_q') else -1
+                print(f"[AUDIOSOCKET DEBUG] Before send: tx_q size={txq_size}, rx_q size={rxq_size}")
+                if not first_audio_sent:
+                    # For the first frame, send silence since client hasn't had chance to write yet
+                    silence_response = types.audio + PCM_SIZE + bytes(320)
                     with self._lock:
-                        self.conn.send(
-                            types.audio
-                            + len(audio_data).to_bytes(2, "big")
-                            + audio_data
-                        )
+                        self.conn.send(silence_response)
+                    print(f"[AUDIOSOCKET DEBUG] Sent first frame (silence): {len(silence_response)} bytes")
+                    first_audio_sent = True
+                else:
+                    if self._tx_q.empty():
+                        silence_response = types.audio + PCM_SIZE + bytes(320)
+                        with self._lock:
+                            self.conn.send(silence_response)
+                        print(f"[AUDIOSOCKET DEBUG] Sent silence response: {len(silence_response)} bytes (tx_q empty, size={txq_size})")
+                    else:
+                        audio_data = self._tx_q.get()[:320]
+                        response = types.audio + len(audio_data).to_bytes(2, "big") + audio_data
+                        with self._lock:
+                            self.conn.send(response)
+                        print(f"[AUDIOSOCKET DEBUG] Sent audio response: {len(response)} bytes (tx_q size after get={self._tx_q.qsize()})")
 
             elif type == types.error:
                 self._decode_error(payload)
 
             elif type == types.uuid:
                 self.uuid = payload.hex()
+                print(f"[AUDIOSOCKET INFO] Received UUID: {self.uuid}")
+
+            elif type == types.silence:
+                print("[AUDIOSOCKET INFO] Received silence frame")
+                if not self._rx_q.full():
+                    self._rx_q.put(bytes(320))
+
+            elif type == types.hangup:
+                print("[AUDIOSOCKET INFO] Received hangup request")
+                self.connected = False
+                self.conn.close()
+                return
+
+            else:
+                print(f"[AUDIOSOCKET WARNING] Unknown message type: {type!r}")
+        
+        print(f"[AUDIOSOCKET INFO] _process loop ended for {self.peer_addr}")
+        self.connected = False
+        self.conn.close()
