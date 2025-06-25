@@ -163,33 +163,16 @@ class ConnectionFixed:
             # Non-blocking get to maintain real-time performance
             audio = self._rx_q.get_nowait()
             
-            # Ensure consistent frame size for audio processing
-            if len(audio) != 320:
-                audio += bytes(320 - len(audio))
+            # Return the actual frame size without padding
+            # This allows the application to handle variable frame sizes
+            return audio
                 
         except Empty:
-            # Return silence if no audio available
-            return bytes(320)
+            # Return empty bytes if no audio available
+            return b""
 
-        # Apply audio resampling if configured
-        if self._asterisk_resample:
-            if self._asterisk_resample.ulaw2lin:
-                audio = audioop.ulaw2lin(audio, 2)
-
-            if self._asterisk_resample.rate != 8000:
-                audio, self._asterisk_resample.ratecv_state = audioop.ratecv(
-                    audio,
-                    2,
-                    1,
-                    8000,
-                    self._asterisk_resample.rate,
-                    self._asterisk_resample.ratecv_state,
-                )
-
-            if self._asterisk_resample.channels == 2:
-                audio = audioop.tostereo(audio, 2, 1, 1)
-
-        return audio
+        # Note: Audio resampling is now handled by the application layer
+        # This allows for proper handling of variable frame sizes
 
     def write(self, audio):
         """Put audio into the transmit queue"""
