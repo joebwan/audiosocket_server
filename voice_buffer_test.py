@@ -32,16 +32,25 @@ class VoiceBufferTest:
         self.logger.info(f"Frame size: {self.frame_size} bytes ({self.frame_duration*1000:.0f}ms)")
         
         # Voice activity detection parameters
-        self.silence_threshold = 500  # Amplitude threshold for silence
+        self.silence_threshold = 100  # Lower threshold for better detection
         self.speech_frames = 0  # Count consecutive speech frames
         self.silence_frames = 0  # Count consecutive silence frames
-        self.min_speech_frames = 5  # Minimum speech frames to start recording
-        self.min_silence_frames = 10  # Minimum silence frames to trigger playback
+        self.min_speech_frames = 3  # Minimum speech frames to start recording
+        self.min_silence_frames = 15  # Minimum silence frames to trigger playback
         
         # Buffer for recorded voice
         self.voice_buffer = []
         self.is_recording = False
+        self.has_prompted = False
         
+    def generate_prompt_tone(self, frequency=1000, duration=0.5, volume=0.3):
+        """Generate a prompt tone"""
+        samples = int(self.sample_rate * duration)
+        t = np.linspace(0, duration, samples, endpoint=False)
+        tone = np.sin(2 * np.pi * frequency * t) * volume
+        tone = (tone * 32767).astype(np.int16)
+        return tone.tobytes()
+    
     def detect_voice_activity(self, audio_data):
         """Detect if audio contains speech or silence"""
         # Convert bytes to 16-bit integers
@@ -56,7 +65,6 @@ class VoiceBufferTest:
         """Handle connection with voice buffer test"""
         self.logger.info(f"New connection from {call.peer_addr}")
         self.logger.info("Starting voice buffer test...")
-        self.logger.info("Speak to record your voice, then be silent to hear playback")
         
         frame_count = 0
         start_time = time.time()
@@ -70,6 +78,10 @@ class VoiceBufferTest:
                 # Detect voice activity
                 has_speech = self.detect_voice_activity(audio_data)
                 
+                # Log amplitude for debugging
+                audio_array = np.frombuffer(audio_data, dtype=np.int16)
+                rms = np.sqrt(np.mean(audio_array.astype(np.float32) ** 2))
+                
                 if has_speech:
                     self.speech_frames += 1
                     self.silence_frames = 0
@@ -78,19 +90,26 @@ class VoiceBufferTest:
                     if self.speech_frames >= self.min_speech_frames:
                         if not self.is_recording:
                             self.is_recording = True
-                            self.logger.info("🎤 Recording started...")
+                            self.logger.info(f"🎤 Recording started! (RMS: {rms:.0f})")
                         
                         # Add to voice buffer
                         self.voice_buffer.append(audio_data)
                         
                         # Log recording progress
-                        if len(self.voice_buffer) % 50 == 0:
+                        if len(self.voice_buffer) % 25 == 0:
                             duration = len(self.voice_buffer) * self.frame_duration
                             self.logger.info(f"Recording: {duration:.1f}s ({len(self.voice_buffer)} frames)")
                 
                 else:
                     self.silence_frames += 1
                     self.speech_frames = 0
+                    
+                    # Prompt to speak if we haven't prompted yet and have been silent
+                    if not self.has_prompted and self.silence_frames >= 50:  # 1 second of silence
+                        self.logger.info("🔊 Playing prompt tone - please speak now!")
+                        prompt_tone = self.generate_prompt_tone()
+                        call.write(prompt_tone)
+                        self.has_prompted = True
                     
                     # Stop recording and start playback after minimum silence
                     if self.silence_frames >= self.min_silence_frames:
@@ -104,24 +123,25 @@ class VoiceBufferTest:
                                 call.write(recorded_frame)
                                 
                                 # Log playback progress
-                                if i % 50 == 0:
+                                if i % 25 == 0:
                                     progress = (i / len(self.voice_buffer)) * 100
                                     self.logger.info(f"Playback: {progress:.0f}% complete")
                             
-                            self.logger.info("✅ Playback complete")
+                            self.logger.info("✅ Playback complete - speak again to record more")
                             
                             # Clear buffer for next recording
                             self.voice_buffer.clear()
+                            self.has_prompted = False  # Reset for next cycle
                 
-                # Log status every 100 frames
-                if frame_count % 100 == 0:
+                # Log status every 50 frames
+                if frame_count % 50 == 0:
                     if self.is_recording:
                         duration = len(self.voice_buffer) * self.frame_duration
-                        self.logger.info(f"Frame {frame_count}: Recording ({duration:.1f}s)")
+                        self.logger.info(f"Frame {frame_count}: Recording ({duration:.1f}s, RMS: {rms:.0f})")
                     elif self.silence_frames < self.min_silence_frames:
-                        self.logger.info(f"Frame {frame_count}: Silence ({self.silence_frames}/{self.min_silence_frames})")
+                        self.logger.info(f"Frame {frame_count}: Silence ({self.silence_frames}/{self.min_silence_frames}, RMS: {rms:.0f})")
                     else:
-                        self.logger.info(f"Frame {frame_count}: Waiting for speech")
+                        self.logger.info(f"Frame {frame_count}: Waiting for speech (RMS: {rms:.0f})")
                 
                 # Small delay to prevent overwhelming
                 time.sleep(0.001)
@@ -157,11 +177,12 @@ def main():
     print("================")
     print("This test records your voice and plays it back during silence.")
     print("\nHow it works:")
-    print("1. Speak for at least 100ms to start recording")
-    print("2. Continue speaking - your voice is being recorded")
-    print("3. Be silent for at least 200ms to trigger playback")
-    print("4. Hear your recorded voice played back")
-    print("5. Repeat the cycle")
+    print("1. Wait for the prompt tone (1kHz beep)")
+    print("2. Speak for at least 60ms to start recording")
+    print("3. Continue speaking - your voice is being recorded")
+    print("4. Be silent for at least 300ms to trigger playback")
+    print("5. Hear your recorded voice played back")
+    print("6. Repeat the cycle")
     print("\nThis tests both audio quality and buffering.\n")
     
     test = VoiceBufferTest()
