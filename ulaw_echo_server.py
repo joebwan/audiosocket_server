@@ -84,6 +84,10 @@ class ULAWEchoServer:
         ulaw_frames = 0
         pcm_frames = 0
         
+        # Format detection
+        format_detected = False
+        is_ulaw = False
+        
         try:
             while call.connected:
                 # Read incoming audio
@@ -101,10 +105,20 @@ class ULAWEchoServer:
                 if frame_count <= 3:
                     format_type = self.analyze_audio_format(audio_data)
                     self.logger.info(f"Frame {frame_count}: {len(audio_data)} bytes - {format_type}")
+                    
+                    # Detect format based on first few frames
+                    if "ULAW" in format_type:
+                        is_ulaw = True
+                        format_detected = True
+                        self.logger.info("  Format detected: ULAW - will process all frames as ULAW")
+                    elif "PCM" in format_type:
+                        is_ulaw = False
+                        format_detected = True
+                        self.logger.info("  Format detected: PCM - will process all frames as PCM")
                 
-                # Process audio based on format
-                if frame_count <= 3:
-                    # For first few frames, try to detect format
+                # Process audio based on detected format
+                if not format_detected and frame_count <= 3:
+                    # Still detecting format
                     format_type = self.analyze_audio_format(audio_data)
                     if "ULAW" in format_type:
                         # Convert ULAW to PCM for processing
@@ -115,25 +129,25 @@ class ULAWEchoServer:
                         echo_data = self.pcm_to_ulaw(pcm_data)
                         call.write(echo_data)
                         
-                        if frame_count <= 3:
-                            self.logger.info(f"  Processed as ULAW: {len(audio_data)} -> {len(pcm_data)} -> {len(echo_data)} bytes")
+                        self.logger.info(f"  Processed as ULAW: {len(audio_data)} -> {len(pcm_data)} -> {len(echo_data)} bytes")
                     else:
                         # Assume PCM, echo directly
                         call.write(audio_data)
                         pcm_frames += 1
                         
-                        if frame_count <= 3:
-                            self.logger.info(f"  Processed as PCM: {len(audio_data)} bytes")
+                        self.logger.info(f"  Processed as PCM: {len(audio_data)} bytes")
                 else:
-                    # After format detection, process accordingly
-                    if ulaw_frames > pcm_frames:
+                    # Format detected, process accordingly
+                    if is_ulaw:
                         # ULAW processing
                         pcm_data = self.ulaw_to_pcm(audio_data)
                         echo_data = self.pcm_to_ulaw(pcm_data)
                         call.write(echo_data)
+                        ulaw_frames += 1
                     else:
                         # PCM processing
                         call.write(audio_data)
+                        pcm_frames += 1
                 
                 # Log every 50 frames
                 if frame_count % 50 == 0:
@@ -141,8 +155,10 @@ class ULAWEchoServer:
                     fps = frame_count / elapsed if elapsed > 0 else 0
                     
                     self.logger.info(f"Frame {frame_count}: {len(audio_data)} bytes, FPS: {fps:.1f}")
-                    if ulaw_frames > 0:
-                        self.logger.info(f"  ULAW frames: {ulaw_frames}, PCM frames: {pcm_frames}")
+                    if format_detected:
+                        format_name = "ULAW" if is_ulaw else "PCM"
+                        self.logger.info(f"  Processing as: {format_name}")
+                    self.logger.info(f"  ULAW frames: {ulaw_frames}, PCM frames: {pcm_frames}")
                 
                 # Minimal delay
                 time.sleep(0.001)
