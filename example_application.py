@@ -426,7 +426,7 @@ class AudioStreamer:
 
 
 def handle_call():
-    audiosocket = Audiosocket(("localhost", 1122))
+    audiosocket = Audiosocket(("localhost", 6050))
     audiosocket.prepare_output(outrate=44000, channels=2)
     audiosocket.prepare_input(inrate=44000, channels=2)
     call = audiosocket.listen()

@@ -274,7 +274,7 @@ class TestAudioQuality(unittest.TestCase):
 class AudioQualityEchoServer:
     """Improved echo server with audio quality monitoring"""
     
-    def __init__(self, host="0.0.0.0", port=1122):
+    def __init__(self, host="0.0.0.0", port=6050):
         self.audiosocket = Audiosocket((host, port))
         
         # Use proper telephony settings

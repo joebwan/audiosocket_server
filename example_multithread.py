@@ -21,7 +21,7 @@ class AudiosocketServer:
         Sets up the audio socket server with configuration.
         """
         # Create a globally accessible audiosocket instance
-        self.audiosocket = Audiosocket(("0.0.0.0", 1122))
+        self.audiosocket = Audiosocket(("0.0.0.0", 6050))
 
         # FIXED: Use proper telephony settings for better audio quality
         # Asterisk AudioSocket expects 8kHz, mono, 16-bit PCM

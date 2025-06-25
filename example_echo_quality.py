@@ -21,7 +21,7 @@ class QualityEchoServer:
     - Audio quality monitoring
     """
 
-    def __init__(self, host="0.0.0.0", port=1122):
+    def __init__(self, host="0.0.0.0", port=6050):
         """
         Initialize the quality echo server with proper telephony settings.
         

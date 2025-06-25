@@ -12,7 +12,7 @@ agi = astrisk.AGI()
 # Start an audio socket server
 agi.answer()
 try:
-    agi.appexec("AudioSocket(" + str(uuid.uuid4()) + ",localhost:1122)")
+    agi.appexec("AudioSocket(" + str(uuid.uuid4()) + ",localhost:6050)")
 except:
     pass
     logger.info("AudioSocket is already running")
