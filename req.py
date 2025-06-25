@@ -1,16 +1,22 @@
-import mylogging
+# Standard library imports
 from time import sleep
+
 import numpy as np
 import requests
 
+# Local imports
+import mylogging
 
-class Requsts (object):
+
+class Requests:
     def __init__(self):
-        
         self.logger = mylogging.ColouredLogger("request")
         self.logger.debug("Request object created")
+        # Initialize missing attributes
+        self.headers = {}
+        self.body = {}
 
-    def send(self,method,url):
+    def send(self, method, url):
         self.logger.debug("Sending request")
         if method == "GET":
             self.logger.debug("Sending GET request")

@@ -1,137 +1,436 @@
 # Asterisk AudioSocket Server
 
-A Python socket server for use with the [Asterisk](https://github.com/asterisk/asterisk) [AudioSocket](https://github.com/CyCoreSystems/audiosocket) Dialplan application and channel driver.
+A modern Python-based AudioSocket server for Asterisk that enables real-time audio streaming and processing of phone calls. This project provides a complete solution for building voice applications that integrate with Asterisk PBX systems through the AudioSocket protocol.
 
-While it's intended to be used like a Python module/library (see example), you can of course use the information
-provided inside of the main file to make something more custom fit for your needs.
+## 🚀 Features
 
-The creator of the Asterisk-side programs also made a library himself in Golang, which you
-can find in the link to the original AudioSocket project above.
+- **Real-time Audio Processing**: Low-latency audio streaming with 8kHz, 16-bit mono PCM
+- **Voice Activity Detection**: Automatic speech detection using WebRTC VAD
+- **Multi-language Support**: English and Hindi audio responses with configurable mappings
+- **Silence Handling**: Intelligent silence detection and interruption handling
+- **Audio Format Conversion**: Automatic ULAW ↔ Linear PCM conversion ([📖 Detailed Documentation](docs/audio_conversion.md))
+- **Multi-threading**: Support for multiple simultaneous calls
+- **Comprehensive Logging**: Colored console and file logging
+- **Python 3.13+ Compatible**: Modern Python support with compatibility layers
 
+## 📋 Prerequisites
 
-**PLEASE NOTE:** While AudioSocket is an absolutely excellent tool, and still one of the only (sorta) built-in ways to extract
-raw audio stream of calls from Asterisk. A few oddities exist with how it works that I've encountered, and will explain in more detail below.
+### For Local Development (macOS)
+- Python 3.13+ (recommended) or Python 3.8+
+- pip (Python package installer)
+- Git
 
+### For Production Deployment (Ubuntu 24.04)
+- Ubuntu 24.04 LTS
+- Python 3.13+ or Python 3.8+
+- Asterisk PBX (for production use)
+- Systemd (for service management)
 
-## Instructions
+## 🛠️ Local Development Setup (macOS)
 
-### Intro
-
-*What does this allow me to do?*
-
-AudioSocket, whether used as a channel driver or Dialplan application, behaves the same and has the primary purpose of
-letting us access an Asterisk channel's incoming and outgoing audio streams and use them externally for whatever. Though unless its connected to a channel with BridgeAdd or ChanSpy, it cannot be used to passively "intercept" audio on a channel (it blocks execution in the Dialplan, its *not* an audio hook like MixMonitor).
-
-You can also use it to trigger a hangup on the channel from within your program (by calling the connection object's `hangup()` method), that's about it signaling wise, but is really all you need.
-
-
-### Server usage
-
-After placing `audiosocket.py` and `connection.py` in a place where your project can access it, you can start using it like this:
-
-```python
-from audiosocket import *
-
-audiosocket = Audiosocket(("0.0.0.0", 1234))
-connection = audiosocket.listen()
+### 1. Clone the Repository
+```bash
+git clone <your-repo-url>
+cd audiosocket_server
 ```
 
-This would create a new audiosocket object and bind it to all network interfaces 
-on the computer using the port 1234, `audiosocket.listen()` will block until a connection is received. A connection object (the new socket) is returned when one does occur, just like with the standard `socket` Python module.
-
-
-Sending/receiving audio using the provided `read()` and `write()` methods is intended to be done in a `while` loop for as long as `connection.connected` is True. That loop should also send/receive audio to/from another source, for example
-you could use [sounddevice](https://github.com/spatialaudio/python-sounddevice) to play audio from AudioSocket to your speakers and send audio from your microphone to AudioSocket, sorta creating a simple softphone.
-
-In the [example](https://github.com/NormHarrison/audiosocket_server/blob/master/example_application.py) usage here, audio is simply read from the connected Asterisk channel, and then sent back to it, creating an echo/loopback.
-
-
-### Handling audio
-
-By default AudioSocket sends the server audio in the format of 16-bit, 8KHz, mono LE PCM, *at least* when used
-as a standalone Asterisk application.
-
-Unfortunately, this is now when weird parts of AudioSocket begin to show up.
-
-When used as a standalone Asterisk application (This has occurred on many different computers and Asterisk versions, spanning three different CPU architectures), for some reason (I'm assuming the reason is within [app_audiosocket.c](https://github.com/asterisk/asterisk/blob/master/apps/app_audiosocket.c) maybe?)
-as soon as the application is called and starts sending/receiving audio, **one CPU core on the Asterisk server will remain at 100% usage** until the channel is hungup. This can cause some problems...
-
-I don't know C and I haven't looked through the of the application itself, so I'm not quite sure what could be causing this. Thankfully though there is a way around it.
-
-When AudioSocket is used like a channel driver, for example `Dial(AudioSocket/<uuid>/127.0.0.1:3278)`, CPU usage remains perfectly normal, but... depending on what the AudioSocket is going to bridged with (for example, a softphone connected via SIP), the audio sent to your server will no longer be in
-16-bit, 8KHz, mono LE PCM format.
-
-*Instead...* It will be encoded and sent as whatever audio codec was agreed upon between the two channels. So in my experience, when a SIP softphone that uses the u-law (G.711) codec makes a call to a place in the Dialplan
-that eventually calls AudioSocket, the audio you will be sent will also be in encoded as u-law, which can be both a positive and negative. Due to Asterisk's ability to handle a
-wide range codecs and transcode between them though, I assume there is probably a way around this by manually setting the codec to use within the Dialplan, right before AudioSocket() is called, but I haven't experimented with that yet.
-
-Now with sending audio back to AudioSocket. Even though AudioSocket will send you audio in a different codec when brided with certain channels, **it still wants to receive
-16-bit, 8KHz, mono LE PCM** when you send audio back to it.
-
-For me, this was a very difficult thing to deal with initially, until I found that an execellent built-in Python module exists, called [audioop](https://docs.python.org/3/library/audioop.html), for handing raw PCM in many different ways
-(resampling it, converting between mono and stereo, converting to/from u-LAW). I strongly recommend using this to prepare your audio source for AudioSocket whenever it's not already in telephone-quality audio, which is probably almost always.
-
-### Integrated [audioop](https://docs.python.org/3/library/audioop.html) features
-
-Certain methods of audioop are now provided within the audiosocket object itself, so if you wanted, you could resample/remix input or output audio like this:
-
-
-Creation of a new audiosocket object is still done as normal, but now, before calling `listen()`, you can choose to have the module prepare the audio being sent, received, or both by calling these methods and providing correct arguments:
-```python
-audiosocket.prepare_input()
-audiosocket.prepare_output()
+### 2. Create Virtual Environment
+```bash
+python3 -m venv venv
+source venv/bin/activate
 ```
 
-Keep in mind that inrate and channels must match the sample rate and number of channels of the audio data your writing.
-By default, CD quality audio is assumed (44000Hz, 16-bit stereo linear PCM), but you can change this to use whatever values audioop's `ratecv()` method supports:
-```python
-audiosocket.prepare_input(inrate=48000, channels=2)
+### 3. Install Dependencies
+```bash
+pip install -r requirements.txt
 ```
 
-For recieved audio, outrate and channels specifiy how you want the server to prepare audio before
-returning it to you via the read() method. The argument ulaw2lin is also available, this will convert audio data received in ULAW encoding from Asterisk
-to 8Khz, 16-bit mono linear PCM (which you can then upsample too if needed). This is very useful for when AudioSocket is bridged with SIP or IAX channels (which still commonly use ULAW encoding):
-```python
-audiosocket.prepare_output(outrate=44000, channels=2, ulaw2lin=True)
-```
-Finally, you would then call the `listen()` method as normal.
-
-
-### Multi-threaded usage
-
-Since the `listen()` method of the main Audiosocket object returns a separate connection object whenever a connection does occur, you can send this object off in
-its own thread the same way you would when multi-threading a raw socket. 
-
-You could create a globally accessible Audiosocket object and then call its `listen()` method in a loop indefinitely, and each returned connection object would be sent off in a new thread, letting you handle multiple phone calls simultaneously:
-
-```python
-from threading import Thread
-from audiosocket import *
-
-
-audiosocket = Audiosocket(("0.0.0.0", 1234))
-
-def handle_connection(conn):
-
-  while conn.connected:
-    data = conn.read()
-    conn.write(data)
-
-  print('Connection with {0} is over'.format(conn.peer_addr))
-
-
-while True:
-  conn = audiosocket.listen()
-  connection_thread = Thread(target=handle_connection, args=(conn,))
-  connection_thread.start()
-
+### 4. Run Tests
+```bash
+python -m unittest discover -v
 ```
 
+### 5. Start the Server
+```bash
+# Basic echo server
+python example_multithread.py
 
-### Final notes
+# Voice bot with VAD
+python example_application.py
+```
 
-Throughout the course of trying to use this initially myself, some certain aspects about auduo terminology became clearer to me, but most are still unclear overall, so what I say below should be taken lightly.
+## 🏗️ Project Structure
 
-AudioSocket sends it's audio data in chunks of 320 bytes, which represents 20ms of 16-bit 8KHZ mono PCM (this is what you will receive when doing this: `audio_data = audiosocket.read()`), and that's also
-what it needs to receive back from you when sending audio. Anymore or less will result in distorted audio. Thankfully 20ms seems to be a common length of audio to provide within the world of APIs and probably programming in general (I'm sure there's an explanation of this somewhere). So all you
-should have to do to prepare your audio source before sending to AudioSocket, is to downsample it to the required 8KHz mono.
+```
+audiosocket_server/
+├── audiosocket.py          # Main AudioSocket server class
+├── connection.py           # Connection handler and audio processing
+├── example_application.py  # Complete voice bot implementation
+├── example_multithread.py  # Multi-threaded server example
+├── mapping.py             # Audio file configuration
+├── mylogging.py           # Custom logging system
+├── req.py                 # HTTP request wrapper
+├── audioop_compat.py      # Python 3.13+ compatibility layer
+├── demo_audios/           # Audio files for voice responses
+│   ├── en/               # English audio files
+│   └── hi/               # Hindi audio files
+├── requirements.txt       # Python dependencies
+├── test_audiosocket.py    # Comprehensive test suite
+└── README.md             # This file
+```
+
+## 🔧 Configuration
+
+### Audio File Mapping
+Configure audio responses in `mapping.py`:
+```python
+mapping = {
+    "en": {
+        1: "demo_audios/en/hello.wav",
+        2: "demo_audios/en/ask.wav",
+        # ... more mappings
+    },
+    "hi": {
+        1: "demo_audios/hi/1.wav",
+        2: "demo_audios/hi/2.wav",
+        # ... more mappings
+    }
+}
+```
+
+### Server Configuration
+```python
+# Create server instance
+audiosocket = Audiosocket(("0.0.0.0", 1122))
+
+# Configure audio processing
+audiosocket.prepare_output(outrate=44000, channels=2)
+audiosocket.prepare_input(inrate=44000, channels=2)
+```
+
+## 🧪 Testing
+
+### Run All Tests
+```bash
+python -m unittest discover -v
+```
+
+### Run Specific Test Categories
+```bash
+# Test core functionality
+python -m unittest test_audiosocket.TestAudiosocket -v
+
+# Test connection handling
+python -m unittest test_audiosocket.TestConnection -v
+
+# Test audio processing
+python -m unittest test_audiosocket.TestAudioFileGeneration -v
+```
+
+### Test Coverage
+The test suite covers:
+- ✅ AudioSocket server initialization and configuration
+- ✅ Connection handling and audio processing
+- ✅ Voice Activity Detection (VAD)
+- ✅ Audio format conversion (ULAW ↔ PCM)
+- ✅ Multi-threading capabilities
+- ✅ Logging system
+- ✅ HTTP request handling
+- ✅ Audio file management
+
+## 🛡️ Pre-commit Style Checks
+
+This project uses [pre-commit](https://pre-commit.com/) to automatically check and enforce code style before each commit.
+
+### Setup
+
+1. Install pre-commit (if not already installed):
+   ```bash
+   pip install pre-commit
+   ```
+2. Install the pre-commit hooks:
+   ```bash
+   pre-commit install
+   ```
+   This will set up the hooks to run automatically on every commit.
+
+### What Gets Checked
+- **Black**: Code formatting (PEP 8, 4-space indentation, line length, etc.)
+- **isort**: Import sorting (standard library, third-party, local)
+- **pyupgrade**: Modern Python syntax (including f-strings)
+- **Whitespace**: Trailing whitespace, end-of-file, YAML, large files
+- **flake8**: PEP 8 compliance, naming, unused imports, etc. (manual only)
+
+### Usage
+
+- **On every commit:** Black, isort, pyupgrade, and whitespace checks will run and auto-fix issues. If any files are changed, the commit will be blocked and you must re-add and recommit.
+- **flake8** will NOT block commits, but you can run it manually to see all style warnings:
+  ```bash
+  pre-commit run flake8 --all-files --hook-stage manual
+  ```
+
+### Example Workflow
+```bash
+# Make code changes
+# ...
+git add .
+git commit -m "Your message"
+# If style issues are auto-fixed, re-add and recommit
+# To see all style warnings (not blocking):
+pre-commit run flake8 --all-files --hook-stage manual
+```
+
+### Updating Hooks
+To update all hooks to their latest versions:
+```bash
+pre-commit autoupdate
+```
+
+For more details, see the `.pre-commit-config.yaml` file in the repo.
+
+## 🚀 Production Deployment (Ubuntu 24.04)
+
+### 1. System Setup
+
+#### Update System
+```bash
+sudo apt update && sudo apt upgrade -y
+```
+
+#### Install Python and Dependencies
+```bash
+sudo apt install python3 python3-pip python3-venv git -y
+```
+
+#### Install Asterisk (if needed)
+```bash
+sudo apt install asterisk -y
+```
+
+### 2. Application Setup
+
+#### Clone and Setup Application
+```bash
+# Clone repository
+git clone <your-repo-url> /opt/audiosocket_server
+cd /opt/audiosocket_server
+
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Set permissions
+sudo chown -R asterisk:asterisk /opt/audiosocket_server
+```
+
+### 3. Systemd Service Configuration
+
+#### Create Service File
+```bash
+sudo nano /etc/systemd/system/audiosocket.service
+```
+
+Add the following content:
+```ini
+[Unit]
+Description=Asterisk AudioSocket Server
+After=network.target asterisk.service
+Wants=asterisk.service
+
+[Service]
+Type=simple
+User=asterisk
+Group=asterisk
+WorkingDirectory=/opt/audiosocket_server
+Environment=PATH=/opt/audiosocket_server/venv/bin
+ExecStart=/opt/audiosocket_server/venv/bin/python example_multithread.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+#### Enable and Start Service
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable audiosocket
+sudo systemctl start audiosocket
+sudo systemctl status audiosocket
+```
+
+### 4. Asterisk Configuration
+
+#### Add to dialplan
+Edit `/etc/asterisk/extensions.conf`:
+```ini
+[default]
+exten => 1234,1,Answer()
+exten => 1234,2,AudioSocket(uuid,127.0.0.1:1122)
+exten => 1234,3,Hangup()
+```
+
+#### Reload Asterisk
+```bash
+sudo asterisk -rx "dialplan reload"
+```
+
+### 5. Firewall Configuration
+```bash
+# Allow AudioSocket port
+sudo ufw allow 1122/tcp
+
+# Allow Asterisk ports
+sudo ufw allow 5060/udp  # SIP
+sudo ufw allow 10000:20000/udp  # RTP
+```
+
+## 📊 Monitoring and Logs
+
+### View Application Logs
+```bash
+# Systemd logs
+sudo journalctl -u audiosocket -f
+
+# Application logs
+tail -f /opt/audiosocket_server/audiosocket.log
+```
+
+### Health Check
+```bash
+# Check service status
+sudo systemctl status audiosocket
+
+# Test connectivity
+telnet localhost 1122
+```
+
+## 🔧 Advanced Configuration
+
+### Custom Audio Processing
+```python
+from audiosocket import Audiosocket
+
+# Create server with custom audio processing
+audiosocket = Audiosocket(("0.0.0.0", 1122))
+
+# Configure input audio processing
+audiosocket.prepare_input(
+    inrate=48000,      # Input sample rate
+    channels=2,        # Input channels (stereo)
+    ulaw2lin=True      # Convert ULAW to linear PCM
+)
+
+# Configure output audio processing
+audiosocket.prepare_output(
+    outrate=44100,     # Output sample rate
+    channels=1,        # Output channels (mono)
+    ulaw2lin=False     # Keep as linear PCM
+)
+```
+
+### Voice Bot Customization
+```python
+from example_application import AudioStreamer
+
+# Custom voice bot configuration
+streamer = AudioStreamer(call)
+streamer.channel = "en"  # Set language
+streamer.level = 1       # Set initial level
+```
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+#### Port Already in Use
+```bash
+# Check what's using the port
+sudo netstat -tlnp | grep :1122
+
+# Kill the process if needed
+sudo kill -9 <PID>
+```
+
+#### Permission Denied
+```bash
+# Fix permissions
+sudo chown -R asterisk:asterisk /opt/audiosocket_server
+sudo chmod +x /opt/audiosocket_server/*.py
+```
+
+#### Audio Issues
+- Ensure audio files are 8kHz, 16-bit, mono WAV format
+- Check audio file paths in `mapping.py`
+- Verify audio file permissions
+
+#### Python 3.13 Compatibility
+The project includes a compatibility layer for `audioop` which was removed in Python 3.13. This is handled automatically.
+
+### Debug Mode
+```bash
+# Run with debug logging
+python -c "
+import logging
+logging.basicConfig(level=logging.DEBUG)
+from example_application import handle_call
+handle_call()
+"
+```
+
+## 📚 API Reference
+
+### Audiosocket Class
+```python
+class Audiosocket:
+    def __init__(self, bind_info, timeout=None)
+    def prepare_input(self, inrate=44000, channels=2, ulaw2lin=False)
+    def prepare_output(self, outrate=44000, channels=2, ulaw2lin=False)
+    def listen(self)
+```
+
+### Connection Class
+```python
+class Connection:
+    def read(self)
+    def write(self, audio)
+    def hangup(self)
+```
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+### Development Guidelines
+- Follow PEP 8 style guidelines
+- Add tests for new features
+- Update documentation as needed
+- Ensure compatibility with Python 3.8+
+
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## 🙏 Acknowledgments
+
+- Original AudioSocket implementation by CyCoreSystems
+- WebRTC VAD for voice activity detection
+- Asterisk community for PBX integration support
+
+## 📞 Support
+
+For issues and questions:
+- Check the troubleshooting section above
+- Review the test suite for usage examples
+- Open an issue on GitHub with detailed error information
+
+---
+
+**Note**: This project is designed for telephony applications and is optimized for 8kHz sample rate audio processing. For high-fidelity audio applications, consider using higher sample rates and appropriate audio processing libraries.

@@ -1,28 +1,34 @@
 #!/usr/bin/env python3
-import playsound
-from asterisk.agi import *
-import time
+# Standard library imports
+import multiprocessing
 import sys
-import multiprocessing 
+import time
+
+# Third-party imports
+import playsound
+from asterisk.agi import AGI
+
 agi = AGI()
 
 try:
-    #stop_event = threading.Event()
+    # stop_event = threading.Event()
     # Answer the call
     agi.answer()
     agi.verbose("python agi started")
 
     # Play the audio file
-    #playsound.playsound("/home/vboxuser/output.wav")
-    x=multiprocessing.Process(target=agi.stream_file,args=("/home/vboxuser/output",))
-    x.start()
+    # playsound.playsound("/home/vboxuser/output.wav")
+    process = multiprocessing.Process(
+        target=agi.stream_file, args=("/home/vboxuser/output",)
+    )
+    process.start()
     time.sleep(5)
-    #stop_event.set()
+    # stop_event.set()
     multiprocessing.terminate()
-    #my_thread.join()
+    # my_thread.join()
 
     # Wait for the user to enter digits
-    result = agi.wait_for_digit(5000)  # Timeout after 5000 milliseconds"
+    result = agi.wait_for_digit(5000)  # Timeout after 5000 milliseconds
 
     # You can then handle the result as needed
     if result == -1:

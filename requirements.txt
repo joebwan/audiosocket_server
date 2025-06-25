@@ -1,11 +1,18 @@
 #create a requrement.txt for the project
 
+# Core dependencies
 numpy
 webrtcvad
-wave
-threading
-sys
 requests
-math
-json
-base64
+termcolor
+
+# Audio processing
+pydub
+
+# Optional: for audio playback (if needed)
+# Note: playsound has compatibility issues with Python 3.13 on macOS
+# Alternative: use pygame.mixer or simpleaudio for audio playback
+# playsound
+
+# Optional: for AGI example scripts only (agi.py, astrisk.py)
+# asterisk-agi

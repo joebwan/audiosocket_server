@@ -1,6 +1,9 @@
-#writing a class called call
-import audiosocket
-import wave
-from pydub import AudioSegment
+# Standard library imports
 import os
+import wave
 
+# Third-party imports
+from pydub import AudioSegment
+
+# Local imports
+import audiosocket

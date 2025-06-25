@@ -1,17 +1,18 @@
-import astrisk
+# Standard library imports
 import uuid
+
+# Local imports
+import astrisk
 import mylogging
-#start a agi session
 
-logger=mylogging.ColouredLogger()
-agi=astrisk.AGI()
+# Start an AGI session
+logger = mylogging.ColouredLogger("agi")
+agi = astrisk.AGI()
 
-#start a audio socket server
+# Start an audio socket server
 agi.answer()
 try:
-    agi.appexec("AudioSocket("+uuid.uuid4+",localhost:1122)")
+    agi.appexec("AudioSocket(" + str(uuid.uuid4()) + ",localhost:1122)")
 except:
     pass
     logger.info("AudioSocket is already running")
-
-

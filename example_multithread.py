@@ -1,40 +1,81 @@
-# Standard Python modules
-from threading import Thread
+# Standard library imports
+from threading import (  # Python's threading module - similar to java.lang.Thread or Node.js worker_threads
+    Thread,
+)
 
-# Audiosocket module
-from audiosocket import *
+# Local imports
+from audiosocket import (  # Custom library for handling audio socket connections
+    Audiosocket,
+)
 
 
 class AudiosocketServer:
-  def __init__(self):
-    # Create a globally accessible audiosocket instance
-    self.audiosocket = Audiosocket(('0.0.0.0', 1122))
-    self.audiosocket.prepare_output(outrate=44000, channels=2)
-    self.audiosocket.prepare_input(inrate=44000, channels=2)
-    print('Listening for new connections from Asterisk on port {0}'.format(self.audiosocket.port))
+    """
+    Multithreaded audio server that handles real-time audio connections.
+    Similar to a WebSocket server in Node.js or SocketServer in Java, but designed for audio streaming.
+    """
 
-  def handle_connection(self, call):
-    cntr = 0
-    print('Received connection from {0}'.format(call.peer_addr))
+    def __init__(self):
+        """
+        Constructor method (similar to Java constructor or JavaScript constructor).
+        Sets up the audio socket server with configuration.
+        """
+        # Create a globally accessible audiosocket instance
+        self.audiosocket = Audiosocket(("0.0.0.0", 1122))
 
-    while call.connected:
-      audio_data = call.read()
-      call.write(audio_data)
+        # Configure audio output: 44kHz sample rate, 2 channels (stereo)
+        self.audiosocket.prepare_output(outrate=44000, channels=2)
 
-      # Hangup the call after receiving 1000 audio frames
-      if cntr == 1000:
-        call.hangup()
+        # Configure audio input: 44kHz sample rate, 2 channels (stereo)
+        self.audiosocket.prepare_input(inrate=44000, channels=2)
 
-      cntr += 1
+        print(
+            "Listening for new connections from Asterisk on port {}".format(
+                self.audiosocket.port
+            )
+        )
 
-    print('Connection with {0} is now over'.format(call.peer_addr))
+    def handle_connection(self, call):
+        """
+        Worker thread method that handles individual audio connections.
+        This method runs in its own thread for each client connection.
+        """
+        cntr = 0
 
-  def start(self):
-    while True:
-      call = self.audiosocket.listen()
+        print(f"Received connection from {call.peer_addr}")
 
-      call_thread = Thread(target=self.handle_connection, args=(call,))
-      call_thread.start()
+        # Main audio processing loop - runs while connection is active
+        while call.connected:
+            # Read audio data from the client
+            audio_data = call.read()
+
+            # Echo the audio data back to the client (simple audio relay)
+            call.write(audio_data)
+
+            # Hangup the call after receiving 1000 audio frames
+            # This is a simple way to limit the connection duration for testing
+            if cntr == 1000:
+                call.hangup()
+
+            cntr += 1
+
+        print(f"Connection with {call.peer_addr} is now over")
+
+    def start(self):
+        """
+        Main server loop that accepts connections and spawns worker threads.
+        This runs in the main thread and follows the thread-per-connection pattern.
+        """
+        while True:
+            # Accept a new connection (blocking call)
+            call = self.audiosocket.listen()
+
+            # Create a new thread for this connection
+            # Thread(target=function, args=(arg1, arg2)) - creates thread with target function and arguments
+            call_thread = Thread(target=self.handle_connection, args=(call,))
+
+            # Start the worker thread and continue listening for more connections
+            call_thread.start()
 
 
 # Create an instance of the AudiosocketServer class and start the server
