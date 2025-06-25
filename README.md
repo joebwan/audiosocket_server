@@ -60,6 +60,53 @@ python example_multithread.py
 python example_application.py
 ```
 
+## 🐧 Ubuntu Server Setup
+
+### Quick Installation (Recommended)
+```bash
+# Clone repository
+git clone <your-repo-url> /opt/audiosocket_server
+cd /opt/audiosocket_server
+
+# Run installation script
+chmod +x install_ubuntu.sh
+./install_ubuntu.sh
+```
+
+### Manual Installation
+```bash
+# Update system
+sudo apt update && sudo apt upgrade -y
+
+# Install dependencies
+sudo apt install -y python3 python3-pip python3-venv git build-essential python3-dev
+
+# Create virtual environment
+python3 -m venv py_env
+source py_env/bin/activate
+
+# Install setuptools first (required for webrtcvad)
+pip install setuptools>=65.0.0
+
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Test installation
+python -m unittest discover -v
+```
+
+### Voice Activity Detection (VAD) Compatibility
+
+The project uses `webrtcvad` for voice activity detection, which may have compatibility issues on some systems:
+
+- **Python 3.12+**: Requires `setuptools>=65.0.0` for `pkg_resources`
+- **System Libraries**: May require `build-essential` and `python3-dev`
+- **Fallback Mode**: If VAD fails to load, the server will use simple amplitude-based detection
+
+If VAD tests fail, the server will still work with reduced voice detection capabilities.
+
+**For detailed VAD troubleshooting, see**: [VAD Troubleshooting Guide](docs/vad_troubleshooting.md)
+
 ## 🏗️ Project Structure
 
 ```

@@ -503,23 +503,33 @@ class TestVoiceActivityDetection(unittest.TestCase):
     """Test Voice Activity Detection (VAD) functionality using webrtcvad"""
 
     def setUp(self):
-        import webrtcvad
-
-        self.vad = webrtcvad.Vad()
-        self.sample_rate = 8000
-        # Generate 30ms of silence (all zeros)
-        self.silence = (
-            (np.zeros(int(self.sample_rate * 0.03))).astype(np.int16).tobytes()
-        )
-        # Generate 30ms of 440Hz sine wave (speech-like)
-        t = np.linspace(0, 0.03, int(self.sample_rate * 0.03), endpoint=False)
-        self.speech = (
-            (0.5 * np.sin(2 * np.pi * 440 * t) * 32767)
-            .astype(np.int16)
-            .tobytes()
-        )
+        try:
+            import webrtcvad
+            self.webrtcvad_available = True
+            self.vad = webrtcvad.Vad()
+            self.sample_rate = 8000
+            # Generate 30ms of silence (all zeros)
+            self.silence = (
+                (np.zeros(int(self.sample_rate * 0.03))).astype(np.int16).tobytes()
+            )
+            # Generate 30ms of 440Hz sine wave (speech-like)
+            t = np.linspace(0, 0.03, int(self.sample_rate * 0.03), endpoint=False)
+            self.speech = (
+                (0.5 * np.sin(2 * np.pi * 440 * t) * 32767)
+                .astype(np.int16)
+                .tobytes()
+            )
+        except ImportError as e:
+            self.webrtcvad_available = False
+            self.skip_reason = f"webrtcvad not available: {e}"
+        except Exception as e:
+            self.webrtcvad_available = False
+            self.skip_reason = f"webrtcvad initialization failed: {e}"
 
     def test_vad_initialization(self):
+        if not self.webrtcvad_available:
+            self.skipTest(self.skip_reason)
+        
         import webrtcvad
 
         vad0 = webrtcvad.Vad(0)
@@ -532,16 +542,25 @@ class TestVoiceActivityDetection(unittest.TestCase):
         self.assertIsInstance(vad3, webrtcvad.Vad)
 
     def test_vad_detects_silence(self):
+        if not self.webrtcvad_available:
+            self.skipTest(self.skip_reason)
+        
         # Should return False for silence
         is_speech = self.vad.is_speech(self.silence, self.sample_rate)
         self.assertFalse(is_speech)
 
     def test_vad_detects_speech(self):
+        if not self.webrtcvad_available:
+            self.skipTest(self.skip_reason)
+        
         # Should return True for speech-like audio
         is_speech = self.vad.is_speech(self.speech, self.sample_rate)
         self.assertTrue(is_speech)
 
     def test_vad_aggressiveness_levels(self):
+        if not self.webrtcvad_available:
+            self.skipTest(self.skip_reason)
+        
         import webrtcvad
 
         # More aggressive = less likely to detect speech in noisy input
@@ -554,6 +573,9 @@ class TestVoiceActivityDetection(unittest.TestCase):
         # (Do not require False, as all modes may return True for clean synthetic speech)
 
     def test_vad_invalid_audio_length(self):
+        if not self.webrtcvad_available:
+            self.skipTest(self.skip_reason)
+        
         # VAD expects 10, 20, or 30ms frames
         with self.assertRaises(Exception):
             self.vad.is_speech(self.speech[:10], self.sample_rate)

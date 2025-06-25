@@ -1,13 +1,14 @@
 #create a requrement.txt for the project
 
 # Core dependencies
-numpy
-webrtcvad
-requests
-termcolor
+numpy>=1.21.0
+webrtcvad>=2.0.10
+requests>=2.31.0
+termcolor>=2.3.0
+setuptools>=65.0.0  # Required for pkg_resources (needed by webrtcvad)
 
 # Audio processing
-pydub
+pydub>=0.25.0
 
 # Optional: for audio playback (if needed)
 # Note: playsound has compatibility issues with Python 3.13 on macOS

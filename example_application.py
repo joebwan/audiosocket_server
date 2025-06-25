@@ -12,7 +12,18 @@ from time import sleep
 
 import numpy as np
 import requests
-import webrtcvad
+
+# Try to import webrtcvad, but handle import errors gracefully
+try:
+    import webrtcvad
+    VAD_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: webrtcvad not available: {e}")
+    print("Voice Activity Detection will be disabled. Install setuptools to enable VAD.")
+    VAD_AVAILABLE = False
+except Exception as e:
+    print(f"Warning: webrtcvad initialization failed: {e}")
+    VAD_AVAILABLE = False
 
 # Local imports
 from mapping import mapping
@@ -53,8 +64,13 @@ class AudioStreamer:
         self.sample_rate = 8000
 
         # Voice Activity Detection (VAD) setup using WebRTC
-        self.vad = webrtcvad.Vad()
-        self.vad.set_mode(3)  # Most aggressive VAD mode for telephony
+        if VAD_AVAILABLE:
+            self.vad = webrtcvad.Vad()
+            self.vad.set_mode(3)  # Most aggressive VAD mode for telephony
+            self.logger.info("Voice Activity Detection enabled")
+        else:
+            self.vad = None
+            self.logger.warning("Voice Activity Detection disabled - webrtcvad not available")
 
         # Noise detection thresholds and counters
         self.noise_frames_threshold = int(2 * self.sample_rate / 512)
@@ -121,11 +137,16 @@ class AudioStreamer:
         Returns:
             bool: True if speech is detected, False otherwise
         """
-        # Convert bytes to numpy array for processing
-        samples = np.frombuffer(indata, dtype=np.int16)
-
-        # Use WebRTC VAD to detect speech activity
-        is_noise = self.vad.is_speech(samples.tobytes(), rate)
+        if not VAD_AVAILABLE or self.vad is None:
+            # Fallback: simple amplitude-based detection
+            samples = np.frombuffer(indata, dtype=np.int16)
+            amplitude = np.abs(samples).mean()
+            is_noise = amplitude > 1000  # Simple threshold
+        else:
+            # Convert bytes to numpy array for processing
+            samples = np.frombuffer(indata, dtype=np.int16)
+            # Use WebRTC VAD to detect speech activity
+            is_noise = self.vad.is_speech(samples.tobytes(), rate)
 
         if is_noise:
             # self.logger.debug(f"Noise detected in frames {self.noise_frames_count}")
@@ -219,11 +240,16 @@ class AudioStreamer:
             frames (int): Number of audio frames
             rate (int): Sample rate of the audio data
         """
-        # Convert bytes to numpy array for processing
-        samples = np.frombuffer(indata, dtype=np.int16)
-
-        # Use WebRTC VAD to detect speech activity (inverted for silence detection)
-        is_noise = self.vad.is_speech(samples.tobytes(), rate)
+        if not VAD_AVAILABLE or self.vad is None:
+            # Fallback: simple amplitude-based silence detection
+            samples = np.frombuffer(indata, dtype=np.int16)
+            amplitude = np.abs(samples).mean()
+            is_noise = amplitude > 1000  # Simple threshold
+        else:
+            # Convert bytes to numpy array for processing
+            samples = np.frombuffer(indata, dtype=np.int16)
+            # Use WebRTC VAD to detect speech activity (inverted for silence detection)
+            is_noise = self.vad.is_speech(samples.tobytes(), rate)
 
         if not is_noise:
             # self.logger.debug(f"Noise detected in frames {self.noise_frames_count}")
