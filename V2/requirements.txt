@@ -1,0 +1,2 @@
+# AudioSocket Server V2 - Minimal Requirements
+# No external dependencies for basic protocol implementation 
