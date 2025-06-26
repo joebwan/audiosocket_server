@@ -2,6 +2,76 @@
 
 A modern Python-based AudioSocket server for Asterisk that enables real-time audio streaming and processing of phone calls. This project provides a complete solution for building voice applications that integrate with Asterisk PBX systems through the AudioSocket protocol.
 
+## 📡 AudioSocket Protocol Specification
+
+This project implements the complete [Asterisk AudioSocket protocol](https://github.com/asterisk/asterisk/blob/certified/20.7/channels/chan_audiosocket.c) specification, which consists of:
+
+- **Channel Driver** (`chan_audiosocket.c`) - Handles the channel interface
+- **Resource Module** (`res_audiosocket.c`) - Manages socket connections and frame formatting
+
+### Frame Format
+
+The AudioSocket protocol uses a binary frame format:
+
+```
+[1 byte type][2 bytes length][variable payload]
+```
+
+**Frame Types:**
+- `0x01` - UUID frame (call identification)
+- `0x10` - Audio frame (actual audio data)
+- `0x02` - Silence frame (silence indicator)
+- `0x00` - Hangup frame (call termination)
+- `0xFF` - Error frame (error conditions)
+
+**Error Codes:**
+- `0x00` - No error
+- `0x01` - Called party hungup
+- `0x02` - Failed to forward frame
+- `0x04` - Memory allocation error
+
+### Audio Characteristics
+
+**Standard Audio Format:**
+- **Sample Rate**: 8kHz (telephony standard)
+- **Channels**: Mono (1 channel)
+- **Bit Depth**: 16-bit PCM (little-endian)
+- **Frame Duration**: 20ms
+- **Frame Size**: 320 bytes exactly
+- **Encoding**: Linear PCM (default) or ULAW
+
+**Frame Size Calculation:**
+```python
+# 8kHz * 0.02s * 1 channel * 2 bytes = 320 bytes
+frame_size = 8000 * 0.02 * 1 * 2 = 320
+```
+
+### Protocol Flow
+
+1. **Connection Establishment**
+   - TCP connection to AudioSocket server
+   - Optional UUID frame sent for call identification
+
+2. **Audio Exchange**
+   - Asterisk sends audio frames every 20ms
+   - Server must respond with audio frames of same size
+   - Frame timing is critical for audio quality
+
+3. **Error Handling**
+   - Frame corruption detection
+   - Memory allocation errors
+   - Connection reset handling
+
+### Implementation Requirements
+
+To be fully compliant with the Asterisk AudioSocket specification, servers must:
+
+1. **Handle variable frame sizes** (though 320 bytes is standard)
+2. **Respond within frame timing** (20ms intervals)
+3. **Process all frame types** (audio, silence, UUID, error, hangup)
+4. **Maintain connection state** (connected/disconnected)
+5. **Handle protocol errors** gracefully
+
 ## 🚀 Features
 
 - **Real-time Audio Processing**: Low-latency audio streaming with 8kHz, 16-bit mono PCM
@@ -13,6 +83,7 @@ A modern Python-based AudioSocket server for Asterisk that enables real-time aud
 - **Comprehensive Logging**: Colored console and file logging
 - **Python 3.13+ Compatible**: Modern Python support with compatibility layers
 - **Production Ready**: 65/65 tests passing with comprehensive coverage
+- **Protocol Compliant**: Full implementation of Asterisk AudioSocket specification
 
 ## 📋 Prerequisites
 
@@ -53,12 +124,20 @@ python -m unittest discover -v
 
 ### 5. Start the Server
 ```bash
-# Basic echo server
+# Multi-threaded echo server (16kHz optimized)
 python example_multithread.py
 
-# Voice bot with VAD
+# Voice bot with VAD and multi-language support
 python example_application.py
+
+# Fixed version with improved protocol handling
+python audiosocket_fixed.py
 ```
+
+**Server Options:**
+- **`example_multithread.py`**: Simple echo server optimized for 16kHz audio with ULAW conversion
+- **`example_application.py`**: Full-featured voice bot with voice activity detection and multi-language support
+- **`audiosocket_fixed.py`**: Improved AudioSocket implementation with better frame parsing
 
 ## 🐧 Ubuntu Server Setup
 
@@ -111,24 +190,68 @@ If VAD tests fail, the server will still work with reduced voice detection capab
 
 ```
 audiosocket_server/
-├── audiosocket.py          # Main AudioSocket server class
-├── connection.py           # Connection handler and audio processing
-├── example_application.py  # Complete voice bot implementation
-├── example_multithread.py  # Multi-threaded server example
-├── mapping.py             # Audio file configuration
-├── mylogging.py           # Custom logging system
-├── req.py                 # HTTP request wrapper
-├── audioop_compat.py      # Python 3.13+ compatibility layer
-├── demo_audios/           # Audio files for voice responses
-│   ├── en/               # English audio files (11 files)
-│   └── hi/               # Hindi audio files (4 files)
-├── requirements.txt       # Python dependencies
-├── test_audiosocket.py    # Comprehensive test suite (47 tests)
-├── test_example.py        # Example application tests (18 tests)
-└── README.md             # This file
+├── audiosocket.py              # Main AudioSocket server class
+├── audiosocket_fixed.py        # Fixed version with improved frame parsing
+├── connection.py               # Connection handler and audio processing
+├── connection_fixed.py         # Fixed connection with proper protocol handling
+├── example_application.py      # Complete voice bot implementation
+├── example_multithread.py      # Multi-threaded server example
+├── mapping.py                  # Audio file configuration
+├── mylogging.py                # Custom logging system
+├── req.py                      # HTTP request wrapper
+├── audioop_compat.py           # Python 3.13+ compatibility layer
+├── agi.py                      # AGI (Asterisk Gateway Interface) helper
+├── call.py                     # Call handling utilities
+├── astrisk.py                  # Asterisk integration utilities
+├── demo_audios/                # Audio files for voice responses
+│   ├── en/                     # English audio files (14 files)
+│   └── hi/                     # Hindi audio files (4 files)
+├── docs/                       # Documentation
+│   ├── audio_conversion.md     # Audio format conversion guide
+│   └── audio_quality_testing.md # Audio quality troubleshooting
+├── captured_audio/             # Captured audio files for analysis
+├── requirements.txt            # Python dependencies
+├── requirements-dev.txt        # Development dependencies
+├── requirements-optional.txt   # Optional dependencies
+├── test_audiosocket.py         # Comprehensive test suite (47 tests)
+├── test_example.py             # Example application tests (18 tests)
+├── .pre-commit-config.yaml     # Pre-commit hooks configuration
+├── .gitignore                  # Git ignore rules
+└── README.md                   # This file
 ```
 
 ## 🔧 Configuration
+
+### AudioSocket Protocol Configuration
+
+**Optimal Configuration (Recommended):**
+```python
+# ✅ Protocol-compliant settings
+self.audiosocket.prepare_input(
+    inrate=8000,      # 8kHz telephony standard
+    channels=1,       # Mono
+    ulaw2lin=True     # Convert ULAW to PCM
+)
+
+self.audiosocket.prepare_output(
+    outrate=8000,     # 8kHz telephony standard
+    channels=1,       # Mono
+    ulaw2lin=True     # Convert ULAW to PCM
+)
+```
+
+**Frame Processing:**
+```python
+# Expected frame characteristics
+expected_frame_size = 320  # bytes
+expected_frame_interval = 0.02  # seconds (20ms)
+expected_fps = 50  # frames per second
+
+# Monitor frame timing
+if len(audio_data) != expected_frame_size:
+    # Handle frame size mismatch
+    pass
+```
 
 ### Audio File Mapping
 Configure audio responses in `mapping.py`:
@@ -152,7 +275,7 @@ mapping = {
 # Create server instance
 audiosocket = Audiosocket(("0.0.0.0", 1122))
 
-# Configure audio processing
+# Configure audio processing (legacy - not recommended)
 audiosocket.prepare_output(outrate=44000, channels=2)
 audiosocket.prepare_input(inrate=44000, channels=2)
 ```
@@ -199,282 +322,52 @@ python -m unittest test_audiosocket.TestVoiceActivityDetection -v
 - **Error Coverage**: Invalid inputs, edge cases, and error conditions
 - **Synthetic Data**: Realistic test audio generation for VAD and processing
 
-## 🛡️ Pre-commit Style Checks
+## 🔍 Audio Quality Troubleshooting
 
-This project uses [pre-commit](https://pre-commit.com/) to automatically check and enforce code style before each commit.
+### Common Issues and Solutions
 
-### Setup
+**1. Choppy/Fast Audio**
+- **Cause**: Incorrect sample rate (44kHz vs 8kHz)
+- **Solution**: Use 8kHz telephony standard
 
-1. Install pre-commit (if not already installed):
-   ```bash
-   pip install pre-commit
-   ```
-2. Install the pre-commit hooks:
-   ```bash
-   pre-commit install
-   ```
-   This will set up the hooks to run automatically on every commit.
+**2. Poor Sound Quality**
+- **Cause**: Wrong audio format (ULAW vs PCM)
+- **Solution**: Enable ULAW to PCM conversion
 
-### What Gets Checked
-- **Black**: Code formatting (PEP 8, 4-space indentation, line length, etc.)
-- **isort**: Import sorting (standard library, third-party, local)
-- **pyupgrade**: Modern Python syntax (including f-strings)
-- **Whitespace**: Trailing whitespace, end-of-file, YAML, large files
-- **flake8**: PEP 8 compliance, naming, unused imports, etc. (manual only)
+**3. Echo Issues**
+- **Cause**: Processing delays and frame size mismatches
+- **Solution**: Proper frame timing and 320-byte frame validation
 
-### Usage
+**4. Frame Size Errors**
+- **Cause**: Inconsistent frame sizes (640 bytes vs expected 320)
+- **Solution**: Monitor and validate frame sizes
 
-- **On every commit:** Black, isort, pyupgrade, and whitespace checks will run and auto-fix issues. If any files are changed, the commit will be blocked and you must re-add and recommit.
-- **flake8** will NOT block commits, but you can run it manually to see all style warnings:
-  ```bash
-  pre-commit run flake8 --all-files --hook-stage manual
-  ```
+### Real-time Monitoring
 
-### Example Workflow
-```bash
-# Make code changes
-# ...
-git add .
-git commit -m "Your message"
-# If style issues are auto-fixed, re-add and recommit
-# To see all style warnings (not blocking):
-pre-commit run flake8 --all-files --hook-stage manual
-```
+The protocol requires:
+- **Frame size validation** (320 bytes expected)
+- **Frame timing analysis** (~20ms intervals)
+- **Audio format detection** (PCM vs ULAW)
+- **Error condition handling** (memory, frame, hangup errors)
 
-### Updating Hooks
-To update all hooks to their latest versions:
-```bash
-pre-commit autoupdate
-```
+For detailed troubleshooting, see: [Audio Quality Testing Guide](docs/audio_quality_testing.md)
 
-For more details, see the `.pre-commit-config.yaml` file in the repo.
+## 📚 Additional Resources
 
-## 🚀 Production Deployment (Ubuntu 24.04)
-
-### 1. System Setup
-
-#### Update System
-```bash
-sudo apt update && sudo apt upgrade -y
-```
-
-#### Install Python and Dependencies
-```bash
-sudo apt install python3 python3-pip python3-venv git -y
-```
-
-#### Install Asterisk (if needed)
-```bash
-sudo apt install asterisk -y
-```
-
-### 2. Application Setup
-
-#### Clone and Setup Application
-```bash
-# Clone repository
-git clone <your-repo-url> /opt/audiosocket_server
-cd /opt/audiosocket_server
-
-# Create virtual environment
-python3 -m venv py_env
-source py_env/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Set permissions
-sudo chown -R asterisk:asterisk /opt/audiosocket_server
-```
-
-### 3. Systemd Service Configuration
-
-#### Create Service File
-```bash
-sudo nano /etc/systemd/system/audiosocket.service
-```
-
-Add the following content:
-```ini
-[Unit]
-Description=Asterisk AudioSocket Server
-After=network.target asterisk.service
-Wants=asterisk.service
-
-[Service]
-Type=simple
-User=asterisk
-Group=asterisk
-WorkingDirectory=/opt/audiosocket_server
-Environment=PATH=/opt/audiosocket_server/py_env/bin
-ExecStart=/opt/audiosocket_server/py_env/bin/python example_multithread.py
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-```
-
-#### Enable and Start Service
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable audiosocket
-sudo systemctl start audiosocket
-sudo systemctl status audiosocket
-```
-
-### 4. Asterisk Configuration
-
-#### Add to dialplan
-Edit `/etc/asterisk/extensions.conf`:
-```ini
-[default]
-exten => 1234,1,Answer()
-exten => 1234,2,AudioSocket(uuid,127.0.0.1:1122)
-exten => 1234,3,Hangup()
-```
-
-#### Reload Asterisk
-```bash
-sudo asterisk -rx "dialplan reload"
-```
-
-### 5. Firewall Configuration
-```bash
-# Allow AudioSocket port
-sudo ufw allow 1122/tcp
-
-# Allow Asterisk ports
-sudo ufw allow 5060/udp  # SIP
-sudo ufw allow 10000:20000/udp  # RTP
-```
-
-## 📊 Monitoring and Logs
-
-### View Application Logs
-```bash
-# Systemd logs
-sudo journalctl -u audiosocket -f
-
-# Application logs
-tail -f /opt/audiosocket_server/audiosocket.log
-```
-
-### Health Check
-```bash
-# Check service status
-sudo systemctl status audiosocket
-
-# Test connectivity
-telnet localhost 1122
-```
-
-## 🔧 Advanced Configuration
-
-### Custom Audio Processing
-```python
-from audiosocket import Audiosocket
-
-# Create server with custom audio processing
-audiosocket = Audiosocket(("0.0.0.0", 1122))
-
-# Configure input audio processing
-audiosocket.prepare_input(
-    inrate=48000,      # Input sample rate
-    channels=2,        # Input channels (stereo)
-    ulaw2lin=True      # Convert ULAW to linear PCM
-)
-
-# Configure output audio processing
-audiosocket.prepare_output(
-    outrate=44100,     # Output sample rate
-    channels=1,        # Output channels (mono)
-    ulaw2lin=False     # Keep as linear PCM
-)
-```
-
-### Voice Bot Customization
-```python
-from example_application import AudioStreamer
-
-# Custom voice bot configuration
-streamer = AudioStreamer(call)
-streamer.channel = "en"  # Set language
-streamer.level = 1       # Set initial level
-```
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-#### Port Already in Use
-```bash
-# Check what's using the port
-sudo netstat -tlnp | grep :1122
-
-# Kill the process if needed
-sudo kill -9 <PID>
-```
-
-#### Permission Denied
-```bash
-# Fix permissions
-sudo chown -R asterisk:asterisk /opt/audiosocket_server
-sudo chmod +x /opt/audiosocket_server/*.py
-```
-
-#### Audio Issues
-- Ensure audio files are 8kHz, 16-bit, mono WAV format
-- Check audio file paths in `mapping.py`
-- Verify audio file permissions
-- **For echo server audio quality issues, see**: [Audio Quality Testing Guide](docs/audio_quality_testing.md)
-
-#### Python 3.13 Compatibility
-The project includes a compatibility layer for `audioop` which was removed in Python 3.13. This is handled automatically.
-
-### Debug Mode
-```bash
-# Run with debug logging
-python -c "
-import logging
-logging.basicConfig(level=logging.DEBUG)
-from example_application import handle_call
-handle_call()
-"
-```
-
-## 📚 API Reference
-
-### Audiosocket Class
-```python
-class Audiosocket:
-    def __init__(self, bind_info, timeout=None)
-    def prepare_input(self, inrate=44000, channels=2, ulaw2lin=False)
-    def prepare_output(self, outrate=44000, channels=2, ulaw2lin=False)
-    def listen(self)
-```
-
-### Connection Class
-```python
-class Connection:
-    def read(self)
-    def write(self, audio)
-    def hangup(self)
-```
+- [Asterisk AudioSocket Channel Driver](https://github.com/asterisk/asterisk/blob/certified/20.7/channels/chan_audiosocket.c)
+- [Asterisk AudioSocket Resource Module](https://github.com/asterisk/asterisk/blob/certified/20.7/res/res_audiosocket.c)
+- [Audio Conversion Documentation](docs/audio_conversion.md)
+- [Audio Quality Testing Guide](docs/audio_quality_testing.md)
 
 ## 🤝 Contributing
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+This project implements the complete Asterisk AudioSocket protocol specification. When contributing:
 
-### Development Guidelines
-- Follow PEP 8 style guidelines
-- Add tests for new features
-- Update documentation as needed
-- Ensure compatibility with Python 3.7+
+1. Ensure protocol compliance with the [Asterisk specification](https://github.com/asterisk/asterisk/blob/certified/20.7/channels/chan_audiosocket.c)
+2. Maintain frame timing requirements (20ms intervals)
+3. Handle all message types (audio, silence, UUID, error, hangup)
+4. Test with the provided test client
+5. Follow the established code style and documentation standards
 
 ## 📄 License
 

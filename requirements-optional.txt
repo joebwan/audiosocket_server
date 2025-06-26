@@ -1,0 +1,16 @@
+# Optional dependencies - may have compatibility issues with Python 3.13+
+# Install with: pip install -r requirements-optional.txt
+
+# Audio processing (used in call.py example)
+# Note: pydub has compatibility issues with Python 3.13 (missing audioop module)
+pydub>=0.25.0
+
+# Audio playback (used in astrisk.py example)
+# Note: playsound has compatibility issues with Python 3.13 on macOS
+playsound>=1.2.0
+
+# Asterisk AGI (used in astrisk.py example)
+asterisk-agi>=0.1.0
+
+# Include core dependencies
+-r requirements.txt
