@@ -13,6 +13,7 @@ eggs/
 lib/
 lib64/
 parts/
+python_modules/
 sdist/
 var/
 wheels/
@@ -138,8 +139,14 @@ cython_debug/
 .vscode/
 
 # AudioSocket specific
-recordings/
-*.wav
+# Ignore recorded speech (test output, cleaned up)
+recordings/speech/
+# Ignore test-generated recordings
+tests/recordings/*.wav
+# Allow menu prompts to be tracked
+!recordings/prompts/
+!recordings/prompts/*.wav
+# Ignore other audio files
 *.mp3
 *.ogg
 *.flac
@@ -166,4 +173,4 @@ Thumbs.db
 
 # Backup files
 *.bak
-*.backup 
+*.backup
